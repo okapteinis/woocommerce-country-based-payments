@@ -120,7 +120,7 @@ class WoocommerceCountryBasedPayment {
 			$gateway_id = ( is_object( $value ) && isset( $value->id ) ) ? $value->id : $key;
 			$gateway_availability = $this->get_gateway_availability( $gateway_id );
 
-			if ( $gateway_availability && ! in_array( $customer_country, $gateway_availability, true ) ) {
+			if ( is_array( $gateway_availability ) && ! in_array( $customer_country, $gateway_availability, true ) ) {
 				unset( $payment_gateways[ $gateway_id ] );
 			}
 		}
@@ -184,7 +184,7 @@ class WoocommerceCountryBasedPayment {
 		foreach ( $payment_gateways as $gateway ) {
 			$gateway_availability = $this->get_gateway_availability( $gateway->id );
 
-			if ( $gateway_availability && ! in_array( $selected_country, $gateway_availability, true ) ) {
+			if ( is_array( $gateway_availability ) && ! in_array( $selected_country, $gateway_availability, true ) ) {
 				unset( $payment_gateways[ $gateway->id ] );
 			}
 		}
