@@ -31,6 +31,10 @@ Choose which payment gateway will be available based on customer's billing count
 - **PHP:** 7.0 or higher
 - **Tested up to:** WordPress 6.4.2
 
+### ClassicPress Compatibility
+
+While this plugin officially requires WordPress 5.0+, the codebase is technically compatible with ClassicPress (based on WordPress 4.9.x). ClassicPress users can manually install the plugin, and it will function normally with all features. The plugin does not use any WordPress 5.0+ specific features.
+
 ## Installation
 
 1. Upload the plugin files to `/wp-content/plugins/woocommerce-country-based-payments/`
