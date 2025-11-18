@@ -34,6 +34,14 @@ class WoocommerceCountryBasedPayment {
 	private $id;
 
 	/**
+	 * Cached gateway availability settings
+	 *
+	 * @since 1.5.1
+	 * @var array
+	 */
+	private $gateway_cache = array();
+
+	/**
 	 * Construct plugin
 	 *
 	 * @since 1.0
@@ -72,8 +80,9 @@ class WoocommerceCountryBasedPayment {
 	 * Load textdomain
 	 *
 	 * @since 1.0
+	 * @return void
 	 */
-	public function load_plugin_textdomain() {
+	public function load_plugin_textdomain(): void {
 		load_plugin_textdomain( 'wccbp', false, basename( dirname( __FILE__ ) ) . '/languages/' );
 	}
 
@@ -84,7 +93,7 @@ class WoocommerceCountryBasedPayment {
 	 * @since 1.0
 	 * @return WCCBPSettings Settings instance
 	 */
-	public function load_settings() {
+	public function load_settings(): WCCBPSettings {
 		require 'includes/admin/WCCBPSettings.php';
 		return ( new WCCBPSettings() )->init();
 	}
@@ -99,7 +108,7 @@ class WoocommerceCountryBasedPayment {
 	 * @param array $payment_gateways List of available gateways in system.
 	 * @return array Updated list of available payment gateways
 	 */
-	public function available_payment_gateways( $payment_gateways ) {
+	public function available_payment_gateways( array $payment_gateways ): array {
 		if ( is_null( WC()->customer ) || ! WC()->customer instanceof WC_Customer ) {
 			return $payment_gateways;
 		}
@@ -109,7 +118,7 @@ class WoocommerceCountryBasedPayment {
 		foreach ( $payment_gateways as $key => $value ) {
 			// Check if WCML array.
 			$gateway_id = ( is_object( $value ) && isset( $value->id ) ) ? $value->id : $key;
-			$gateway_availability = get_option( $this->id . '_' . $gateway_id );
+			$gateway_availability = $this->get_gateway_availability( $gateway_id );
 
 			if ( $gateway_availability && ! in_array( $customer_country, $gateway_availability, true ) ) {
 				unset( $payment_gateways[ $gateway_id ] );
@@ -127,7 +136,7 @@ class WoocommerceCountryBasedPayment {
 	 * @param array $payment_gateways List of available gateways in system.
 	 * @return array Updated list of available payment gateways
 	 */
-	public function available_payment_gateways_after_cancelation( $payment_gateways ) {
+	public function available_payment_gateways_after_cancelation( array $payment_gateways ): array {
 		// Sanitize and validate the order key
 		$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
 
@@ -173,7 +182,7 @@ class WoocommerceCountryBasedPayment {
 		}
 
 		foreach ( $payment_gateways as $gateway ) {
-			$gateway_availability = get_option( $this->id . '_' . $gateway->id );
+			$gateway_availability = $this->get_gateway_availability( $gateway->id );
 
 			if ( $gateway_availability && ! in_array( $selected_country, $gateway_availability, true ) ) {
 				unset( $payment_gateways[ $gateway->id ] );
@@ -181,6 +190,42 @@ class WoocommerceCountryBasedPayment {
 		}
 
 		return $payment_gateways;
+	}
+
+	/**
+	 * Get gateway availability settings with caching
+	 *
+	 * @since 1.5.1
+	 * @param string $gateway_id Gateway identifier.
+	 * @return array|false Array of country codes or false if unrestricted
+	 */
+	private function get_gateway_availability( string $gateway_id ) {
+		$cache_key = $this->id . '_' . $gateway_id;
+
+		// Check if already cached in class property
+		if ( isset( $this->gateway_cache[ $cache_key ] ) ) {
+			return $this->gateway_cache[ $cache_key ];
+		}
+
+		// Try to get from WordPress object cache
+		$cached_value = wp_cache_get( $cache_key, 'wccbp_gateway_availability' );
+
+		if ( false !== $cached_value ) {
+			// Store in class property for subsequent calls in same request
+			$this->gateway_cache[ $cache_key ] = $cached_value;
+			return $cached_value;
+		}
+
+		// Get from database if not cached
+		$gateway_availability = get_option( $cache_key, false );
+
+		// Cache for future requests (1 hour)
+		wp_cache_set( $cache_key, $gateway_availability, 'wccbp_gateway_availability', HOUR_IN_SECONDS );
+
+		// Store in class property for subsequent calls in same request
+		$this->gateway_cache[ $cache_key ] = $gateway_availability;
+
+		return $gateway_availability;
 	}
 }
 
@@ -234,7 +279,13 @@ wcbp_fs();
 // Signal that SDK was initiated.
 do_action( 'wcbp_fs_loaded' );
 
-function wcbp_fs_settings_url() {
+/**
+ * Get WCCBP settings URL for Freemius integration
+ *
+ * @since 1.2.0
+ * @return string Settings page URL
+ */
+function wcbp_fs_settings_url(): string {
 	return admin_url( 'admin.php?page=wc-settings&tab=wccbp' );
 }
 

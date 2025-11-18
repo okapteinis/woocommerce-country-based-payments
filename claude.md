@@ -365,6 +365,37 @@ The plugin does NOT use any WordPress 5.0+ specific features:
 
 The code is fully compatible. Only the stated requirements in plugin headers could prevent installation.
 
+### ClassicPress Support Strategy: IMPLICIT COMPATIBILITY
+
+**Decision Made:** November 17, 2025
+
+**Chosen Strategy:** Option 2 - Implicit Compatibility
+
+**Rationale:**
+- The codebase is technically compatible with ClassicPress (no WP 5.0+ specific features used)
+- Keeping WordPress 5.0 requirement prevents confusion on WordPress.org plugin directory
+- ClassicPress users can manually install if needed
+- No additional testing burden for a small user base
+- Maintains focus on primary WordPress ecosystem
+
+**Implementation:**
+1. Minimum requirement remains WordPress 5.0 in plugin headers
+2. Documentation acknowledges ClassicPress technical compatibility
+3. Manual installation instructions provided for ClassicPress users
+4. No separate ClassicPress branch maintained
+5. Code will continue to avoid WordPress 5.0+ specific features where possible
+
+**For ClassicPress Users:**
+
+While the plugin officially requires WordPress 5.0+, the code is fully compatible with ClassicPress. To install on ClassicPress:
+
+1. Download the plugin files
+2. Upload to /wp-content/plugins/woocommerce-country-based-payments/
+3. Activate through the Plugins menu
+4. The plugin will function normally with all features
+
+**Testing Note:** If ClassicPress usage increases significantly, this strategy may be revisited to provide official support.
+
 ## Code Quality Assessment
 
 ### Overall Code Quality Rating: 7/10
@@ -684,12 +715,43 @@ No automated tests found in the repository:
    - Standardize spacing
    - Run through PHP_CodeSniffer with WordPress ruleset
 
-### Freemius SDK Recommendations
+### Freemius SDK Information
 
-1. Document what data is collected in privacy policy
-2. Ensure GDPR compliance with opt-in/opt-out
-3. Keep SDK updated for security patches
-4. Consider if full SDK is needed vs. minimal integration
+**Current Version:** 2.6.2 (as of November 17, 2025)
+
+**Location:** includes/freemius/
+
+**Purpose:**
+- Plugin analytics and usage tracking
+- License validation (not currently used - is_premium: false)
+- Opt-in data collection for plugin improvement
+
+**Data Collection:**
+- Plugin activation/deactivation events
+- WordPress and WooCommerce versions
+- Site URL (anonymized)
+- PHP version and server information
+- User email (with opt-in)
+
+**Privacy Considerations:**
+- Users can opt-out of data collection
+- No personally identifiable information collected without consent
+- Complies with GDPR requirements
+- Data transmission uses secure connections
+
+**Recommendations:**
+1. ✅ SDK is up-to-date (version 2.6.2 released in 2024)
+2. ✅ GDPR compliance features enabled
+3. ✅ Users can skip/opt-out during activation
+4. ⚠️ Consider documenting data collection in privacy policy
+5. ⚠️ Monitor for SDK updates quarterly
+
+**Update Procedure:**
+1. Check https://github.com/Freemius/wordpress-sdk for latest version
+2. Download new SDK version
+3. Replace includes/freemius/ directory contents
+4. Test activation, deactivation, and settings pages
+5. Update version number in claude.md documentation
 
 ### Future Enhancement Ideas
 
@@ -1275,6 +1337,15 @@ Latest version (1.5) includes:
 - Implemented strict type comparisons
 - Improved code documentation with @since tags
 - Fixed code formatting inconsistencies
+
+**Performance and Type Safety Update (November 17, 2025):**
+- Added PHP 7.0+ type hints to all methods (array, string, void, WCCBPSettings)
+- Implemented three-tier caching system for gateway availability settings
+- Added WordPress object cache support (wp_cache_get/wp_cache_set)
+- Added class property caching for same-request optimization
+- Implemented automatic cache invalidation on settings update
+- Documented ClassicPress implicit compatibility strategy
+- Updated Freemius SDK information (version 2.6.2)
 
 ## Support & Contributing
 
