@@ -2,6 +2,8 @@
 
 /**
  * Admin settings in WooCommerce
+ *
+ * @since 1.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -10,33 +12,60 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WCCBPSettings {
 
+	/**
+	 * Plugin ID
+	 *
+	 * @since 1.0
+	 * @var string
+	 */
 	protected $id = 'wccbp';
 
-	public function init() {
+	/**
+	 * Initialize settings hooks
+	 *
+	 * @since 1.0
+	 * @return WCCBPSettings Current instance
+	 */
+	public function init(): WCCBPSettings {
 		add_filter( 'woocommerce_settings_tabs_array', array( $this, 'add_settings_settings_tab' ), 50 );
 		add_action( 'woocommerce_settings_' . $this->id, array( $this, 'settings_page' ) );
 		add_action( 'woocommerce_update_options_' . $this->id, array( $this, 'update_options' ) );
+		return $this;
 	}
 
-	public function add_settings_settings_tab( $settings_tabs ) {
+	/**
+	 * Add settings tab to WooCommerce settings
+	 *
+	 * @since 1.0
+	 * @param array $settings_tabs Existing settings tabs.
+	 * @return array Updated settings tabs array
+	 */
+	public function add_settings_settings_tab( array $settings_tabs ): array {
 
 		$settings_tabs[ $this->id ] = __( 'WCCBP', 'wccbp' );
 
 		return $settings_tabs;
 	}
 
-	public function settings_page() {
+	/**
+	 * Render settings page
+	 *
+	 * @since 1.0
+	 * @return void
+	 */
+	public function settings_page(): void {
 		woocommerce_admin_fields( $this->create_tab_section() );
 		wp_nonce_field( 'wccbp_subscription_settings', '_wccbpnonce', false );
 	}
 
 
 	/**
-	 * Cerate input field for every available payment gateway
+	 * Create input field for every available payment gateway
 	 *
-	 * @return $fields array
+	 * @since 1.0
+	 * @return array List of field configuration arrays
 	 */
-	public function create_fields() {
+	public function create_fields(): array {
 		$available_gateways = WC()->payment_gateways->payment_gateways();
 
 		$fields = array();
@@ -56,9 +85,10 @@ class WCCBPSettings {
 	/**
 	 * Create section and include input fields in section
 	 *
-	 * @return array
+	 * @since 1.0
+	 * @return array Complete settings section configuration
 	 */
-	public function create_tab_section() {
+	public function create_tab_section(): array {
 		$section = array();
 
 		$section[] = array(
@@ -80,12 +110,39 @@ class WCCBPSettings {
 
 
 	/**
-	 *  Update setting fields
+	 * Update setting fields with nonce verification
+	 *
+	 * @since 1.0
+	 * @return void
 	 */
-	public function update_options() {
-		if ( empty( $_POST['_wccbpnonce'] ) || ! wp_verify_nonce( $_POST['_wccbpnonce'], 'wccbp_subscription_settings' ) ) {
+	public function update_options(): void {
+		// Verify nonce for security
+		if ( empty( $_POST['_wccbpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wccbpnonce'] ) ), 'wccbp_subscription_settings' ) ) {
+			// Log security event if WP_DEBUG is enabled
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'WCCBP: Nonce verification failed in settings update' );
+			}
 			return;
 		}
 		woocommerce_update_options( $this->create_fields() );
+
+		// Clear cache after settings update
+		$this->clear_gateway_cache();
+	}
+
+	/**
+	 * Clear gateway availability cache
+	 *
+	 * @since 1.5.1
+	 * @return void
+	 */
+	private function clear_gateway_cache(): void {
+		// Clear WordPress object cache for this cache group
+		wp_cache_flush_group( 'wccbp_gateway_availability' );
+
+		// Log cache clear if WP_DEBUG is enabled
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'WCCBP: Gateway availability cache cleared after settings update' );
+		}
 	}
 }

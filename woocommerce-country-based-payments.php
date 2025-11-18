@@ -20,25 +20,38 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Initialize the plugin, settings page and handle plugin logic
+ *
+ * @since 1.0
  */
 class WoocommerceCountryBasedPayment {
 
 	/**
 	 * Plugin ID
 	 *
-	 * @var String
+	 * @since 1.0
+	 * @var string
 	 */
 	private $id;
 
 	/**
+	 * Cached gateway availability settings
+	 *
+	 * @since 1.5.1
+	 * @var array
+	 */
+	private $gateway_cache = array();
+
+	/**
 	 * Construct plugin
+	 *
+	 * @since 1.0
 	 */
 	public function __construct() {
 		$this->id = 'wccbp';
 
 		if ( is_admin() && ! wp_doing_ajax() ) {
-      $this->load_settings();
-    }
+		$this->load_settings();
+	}
 
 		add_action( 'plugins_loaded', array( $this, 'load_plugin_textdomain' ) );
 
@@ -51,30 +64,36 @@ class WoocommerceCountryBasedPayment {
 		}
 
 		// Check if pay_for page.
-		if ( ! is_admin() && isset( $_GET['pay_for_order'] ) && true == $_GET['pay_for_order'] ) {
+		if ( ! is_admin() && isset( $_GET['pay_for_order'] ) && 'true' === sanitize_text_field( wp_unslash( $_GET['pay_for_order'] ) ) ) {
 			add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways_after_cancelation' ), 10, 1 );
 		}
 
-    // Declare HPOS compatibility
-    add_action( 'before_woocommerce_init', function() {
-      if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
-        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
-      }
-    } );
+	// Declare HPOS compatibility
+	add_action( 'before_woocommerce_init', function() {
+		if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+		}
+	} );
 	}
 
 	/**
 	 * Load textdomain
+	 *
+	 * @since 1.0
+	 * @return void
 	 */
-	public function load_plugin_textdomain() {
+	public function load_plugin_textdomain(): void {
 		load_plugin_textdomain( 'wccbp', false, basename( dirname( __FILE__ ) ) . '/languages/' );
 	}
 
 
 	/**
 	 * Load admin settings
+	 *
+	 * @since 1.0
+	 * @return WCCBPSettings Settings instance
 	 */
-	public function load_settings() {
+	public function load_settings(): WCCBPSettings {
 		require 'includes/admin/WCCBPSettings.php';
 		return ( new WCCBPSettings() )->init();
 	}
@@ -85,19 +104,23 @@ class WoocommerceCountryBasedPayment {
 	 * check if certain payment gateway is enabled for country,
 	 * if no, unset it from $payment_gateways array
 	 *
+	 * @since 1.0
 	 * @param array $payment_gateways List of available gateways in system.
-	 * @return array with updated list of available payment gateways
+	 * @return array Updated list of available payment gateways
 	 */
-	public function available_payment_gateways( $payment_gateways ) {
+	public function available_payment_gateways( array $payment_gateways ): array {
 		if ( is_null( WC()->customer ) || ! WC()->customer instanceof WC_Customer ) {
 			return $payment_gateways;
 		}
+
+		$customer_country = WC()->customer->get_billing_country();
+
 		foreach ( $payment_gateways as $key => $value ) {
 			// Check if WCML array.
 			$gateway_id = ( is_object( $value ) && isset( $value->id ) ) ? $value->id : $key;
-			$gateway_availability = get_option( $this->id . '_' . $gateway_id );
+			$gateway_availability = $this->get_gateway_availability( $gateway_id );
 
-			if ( $gateway_availability && ! in_array( WC()->customer->get_billing_country(), $gateway_availability ) ) {
+			if ( $gateway_availability && ! in_array( $customer_country, $gateway_availability, true ) ) {
 				unset( $payment_gateways[ $gateway_id ] );
 			}
 		}
@@ -109,22 +132,100 @@ class WoocommerceCountryBasedPayment {
 	 * if customer gets redirected to the pay_for page
 	 * after a payment cancellation
 	 *
+	 * @since 1.0
 	 * @param array $payment_gateways List of available gateways in system.
-	 * @return array with updated list of available payment gateways
+	 * @return array Updated list of available payment gateways
 	 */
-	public function available_payment_gateways_after_cancelation( $payment_gateways ) {
-		$order_id = wc_get_order_id_by_order_key( $_GET['key'] );
-		$order = new WC_Order( $order_id );
-		$billing_address = $order->get_address();
-		$selected_country = $billing_address['country'];
+	public function available_payment_gateways_after_cancelation( array $payment_gateways ): array {
+		// Sanitize and validate the order key
+		$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+
+		if ( empty( $order_key ) ) {
+			// Log error if WP_DEBUG is enabled
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'WCCBP: Missing order key in payment retry request' );
+			}
+			return $payment_gateways;
+		}
+
+		// Get order ID from order key
+		$order_id = wc_get_order_id_by_order_key( $order_key );
+
+		if ( ! $order_id ) {
+			// Log error if WP_DEBUG is enabled
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'WCCBP: Invalid order key provided: ' . $order_key );
+			}
+			return $payment_gateways;
+		}
+
+		// Get order object using modern WooCommerce function
+		$order = wc_get_order( $order_id );
+
+		if ( ! $order ) {
+			// Log error if WP_DEBUG is enabled
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'WCCBP: Unable to retrieve order with ID: ' . $order_id );
+			}
+			return $payment_gateways;
+		}
+
+		// Get billing country using modern WooCommerce method
+		$selected_country = $order->get_billing_country();
+
+		if ( empty( $selected_country ) ) {
+			// Log error if WP_DEBUG is enabled
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'WCCBP: No billing country found for order ID: ' . $order_id );
+			}
+			return $payment_gateways;
+		}
 
 		foreach ( $payment_gateways as $gateway ) {
-			if ( get_option( $this->id . '_' . $gateway->id ) && ! in_array( $selected_country, get_option( $this->id . '_' . $gateway->id ) ) ) {
+			$gateway_availability = $this->get_gateway_availability( $gateway->id );
+
+			if ( $gateway_availability && ! in_array( $selected_country, $gateway_availability, true ) ) {
 				unset( $payment_gateways[ $gateway->id ] );
 			}
 		}
 
 		return $payment_gateways;
+	}
+
+	/**
+	 * Get gateway availability settings with caching
+	 *
+	 * @since 1.5.1
+	 * @param string $gateway_id Gateway identifier.
+	 * @return array|false Array of country codes or false if unrestricted
+	 */
+	private function get_gateway_availability( string $gateway_id ) {
+		$cache_key = $this->id . '_' . $gateway_id;
+
+		// Check if already cached in class property
+		if ( isset( $this->gateway_cache[ $cache_key ] ) ) {
+			return $this->gateway_cache[ $cache_key ];
+		}
+
+		// Try to get from WordPress object cache
+		$cached_value = wp_cache_get( $cache_key, 'wccbp_gateway_availability' );
+
+		if ( false !== $cached_value ) {
+			// Store in class property for subsequent calls in same request
+			$this->gateway_cache[ $cache_key ] = $cached_value;
+			return $cached_value;
+		}
+
+		// Get from database if not cached
+		$gateway_availability = get_option( $cache_key, false );
+
+		// Cache for future requests (1 hour)
+		wp_cache_set( $cache_key, $gateway_availability, 'wccbp_gateway_availability', HOUR_IN_SECONDS );
+
+		// Store in class property for subsequent calls in same request
+		$this->gateway_cache[ $cache_key ] = $gateway_availability;
+
+		return $gateway_availability;
 	}
 }
 
@@ -178,7 +279,13 @@ wcbp_fs();
 // Signal that SDK was initiated.
 do_action( 'wcbp_fs_loaded' );
 
-function wcbp_fs_settings_url() {
+/**
+ * Get WCCBP settings URL for Freemius integration
+ *
+ * @since 1.2.0
+ * @return string Settings page URL
+ */
+function wcbp_fs_settings_url(): string {
 	return admin_url( 'admin.php?page=wc-settings&tab=wccbp' );
 }
 
